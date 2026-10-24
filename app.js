@@ -272,9 +272,53 @@ function renderPager(page, totalPages){
   };
 }
 
+/* ---------- 常見爭點快速篩選按鈕 ---------- */
+let _chipCounts = null;
+function chipCounts(){
+  if(_chipCounts) return _chipCounts;
+  const d = new Map(), t = new Map(), o = new Map();
+  DATA.forEach(r => {
+    r.disputeTypes.forEach(x => d.set(x, (d.get(x)||0)+1));
+    r.claimTopics.forEach(x => t.set(x, (t.get(x)||0)+1));
+    if(r.outcome) o.set(r.outcome, (o.get(r.outcome)||0)+1);
+  });
+  const sort = m => [...m.entries()].sort((a,b) => b[1]-a[1]);
+  _chipCounts = { d: sort(d), t: sort(t), o: sort(o) };
+  return _chipCounts;
+}
+function renderChips(){
+  const el = $("chipBar"); if(!el) return;
+  const c = chipCounts();
+  const chip = (cls, key, name, n, on) => `<button class="chip ${cls}${on?" on":""}" data-chip="${key}" data-val="${esc(name)}">${esc(name)}<span class="cnt">${n.toLocaleString()}</span></button>`;
+  const any = state.dispute || state.claimTopic || state.outcome;
+  let html = `<div class="chip-row"><span class="chip-label">常見爭點</span>${c.d.map(([n,k]) => chip("d","dispute",n,k,state.dispute===n)).join("")}</div>`;
+  if(c.t.length) html += `<div class="chip-row"><span class="chip-label">理賠主題</span>${c.t.map(([n,k]) => chip("t","claimTopic",n,k,state.claimTopic===n)).join("")}</div>`;
+  if(c.o.length || any) html += `<div class="chip-row"><span class="chip-label">勝負結果</span>${c.o.map(([n,k]) => chip("o","outcome",n,k,state.outcome===n)).join("")}${any?`<button class="chip clear" data-chip="clear">✕ 清除爭點篩選</button>`:""}</div>`;
+  el.innerHTML = html;
+}
+const CHIP_SELECT = { dispute: "disputeFilter", claimTopic: "claimTopicFilter", outcome: "outcomeFilter" };
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-chip]"); if(!b) return;
+  const key = b.dataset.chip;
+  if(key === "clear"){
+    Object.keys(CHIP_SELECT).forEach(k => { state[k] = ""; $(CHIP_SELECT[k]).value = ""; });
+  } else {
+    const v = b.dataset.val;
+    state[key] = state[key] === v ? "" : v;
+    const sel = $(CHIP_SELECT[key]);
+    if(sel){
+      if(state[key] && ![...sel.options].some(o => o.value === state[key])) sel.add(new Option(state[key], state[key]));
+      sel.value = state[key];
+    }
+  }
+  state.selectedIdx = null;
+  render();
+});
+
 function render(){
   if(!SEARCH_ENGINE) return;
   renderFolders();
+  renderChips();
   const _sig = JSON.stringify([state.q,state.scope,state.cat,state.doc,state.dispute,state.claimTopic,state.outcome,state.dateFrom,state.dateTo,state.preset,state.sortKey,state.sortDir]);
   if(_sig !== _lastFilterSig){ state.page = 1; _lastFilterSig = _sig; }
   const filtered = sortRows(getFiltered());
